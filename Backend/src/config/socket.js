@@ -4,10 +4,17 @@ import app from "../app.js";
 
 export const httpServer = createServer(app);
 
-export let io = new Server(httpServer, {
+let io = new Server(httpServer, {
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
     }
 });
 
+export const getIO = () => {
+    if (!io) {
+        throw new Error("Socket.IO has not been initialized");
+    }
+
+    return io;
+};

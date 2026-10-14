@@ -17,6 +17,7 @@ io.on('connection', (socket) => {
     console.log('A new connection was made');
 
     socket.on('cords', (cords) => {
+        console.log(cords);
         io.emit('serverCords', cords);
     })
 });

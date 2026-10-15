@@ -1,6 +1,8 @@
 import app from './src/app.js'
 import { Server } from "socket.io";
 import { createServer } from 'http';
+import ConnectToDB from './src/config/database.js';
+import { Config } from "./src/config/config.js";
 
 const httpServer = createServer(app);
 
@@ -15,11 +17,14 @@ io.on('connection', (socket) => {
     console.log('A new connection was made');
 
     socket.on('cords', (cords) => {
+        console.log(cords);
         io.emit('serverCords', cords);
     })
 });
 
+ConnectToDB();
 
-httpServer.listen(3000, () => {
-    console.log("Server running at port: 3000");
+
+httpServer.listen(Config.PORT || 3000, () => {
+    console.log(`Server running at port: ${Config.PORT}`);
 })

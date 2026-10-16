@@ -1,0 +1,37 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  height: 100vh;
+  background: #0f1c36;
+}
+
+.audio-panel {
+  padding: 16px;
+  color: #fff;
+  font: 14px system-ui;
+}
+
+.audio-panel__user {
+  margin: 8px 0;
+}
+
+.audio-panel__meter {
+  display: block;
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  border: 0;
+  background: #2a3b5f;
+}
+
+.audio-panel__meter::-webkit-progress-bar {
+  background: #2a3b5f;
+}
+
+.audio-panel__meter::-webkit-progress-value {
+  background: #4f9cff;
+}
+
+.audio-panel__meter::-moz-progress-bar {
+  background: #4f9cff;
+}

@@ -6,12 +6,18 @@ import {
 import { usePresence } from '../hooks/usePresence.jsx';
 import './officeCanvas.css';
 
-const SPEED = 230;      // world units / sec
-const ACCEL = 1400;     // how fast we reach SPEED
-const FRICTION = 1100;  // how fast we stop
+const SPEED = 400;      // world units / sec
+
 const KEY_DIRS = {
-  ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1],
-  ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0],
+  KeyW: [0, -1],
+  KeyS: [0, 1],
+  KeyA: [-1, 0],
+  KeyD: [1, 0],
+
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
 };
 
 /* ---------- static background, drawn once to an offscreen canvas ---------- */
@@ -63,6 +69,15 @@ function hitsAny(x, y, r) {
     }
   }
   return false;
+}
+
+function loadAvatar(src) {
+  if (!src) return null;
+
+  const image = new Image();
+  image.src = src;
+
+  return image;
 }
 
 function drawAvatar(g, u, { isMe, speaking, avatarImage }) {
@@ -175,9 +190,9 @@ export default function OfficeCanvas({
     image.src = canvasUser.avtar;
   }, [canvasUser.avtar]);
 
-  const meRef = useRef({ ...canvasUser, x: 760, y: 440, vx: 0, vy: 0, dir: 0, });
-  const identity = useRef(canvasUser);
-  const { peersRef, broadcast } = usePresence({ url: serverUrl, me: identity });
+  const meRef = useRef({ ...canvasUser, x: 760, y: 440, dir: 0, });
+  const identity = useRef({ ...canvasUser, x: 760, y: 440, dir: 0, });
+  const { peersRef, broadcast } = usePresence({ url: serverUrl, me: identity, meetingId });
   const cbRef = useRef(onNearbyChange);
   cbRef.current = onNearbyChange;
 
@@ -187,6 +202,7 @@ export default function OfficeCanvas({
     const g = canvas.getContext('2d');
     const bg = buildBackground();
     const keys = new Set();
+    const avatarImages = new Map();
     let target = null;           // click-to-move destination
     let view = { s: 1, ox: 0, oy: 0, dpr: 1 };
     let raf, last = performance.now(), lastNearby = 0, clickFx = 0;
@@ -235,10 +251,29 @@ export default function OfficeCanvas({
     /* ----- input ----- */
     const onKeyDown = (e) => {
       if (/input|textarea/i.test(e.target.tagName)) return;
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (KEY_DIRS[k]) { keys.add(k); target = null; e.preventDefault(); }
+
+      if (!KEY_DIRS[e.code]) return;
+
+      if (!keys.has(e.code)) {
+        keys.add(e.code);
+        target = null;
+      }
+
+      e.preventDefault();
+
+      console.log('DOWN:', e.code, [...keys]);
     };
-    const onKeyUp = (e) => keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+
+    const onKeyUp = (e) => {
+      if (!KEY_DIRS[e.code]) return;
+
+      keys.delete(e.code);
+
+      console.log('UP:', e.code, [...keys]);
+
+      e.preventDefault();
+    };
+
     const onBlur = () => keys.clear();
     const onPointer = (e) => {
       const r = canvas.getBoundingClientRect();
@@ -265,23 +300,43 @@ export default function OfficeCanvas({
       const len = Math.hypot(ix, iy);
       if (len) { ix /= len; iy /= len; }
 
-      // accelerate toward desired velocity, or apply friction
-      const tvx = ix * SPEED, tvy = iy * SPEED;
-      const rate = (len ? ACCEL : FRICTION) * dt;
-      const approach = (v, t) => (Math.abs(t - v) <= rate ? t : v + Math.sign(t - v) * rate);
-      me.vx = approach(me.vx, tvx); me.vy = approach(me.vy, tvy);
+      // direct movement — no acceleration / friction
+      if (len) {
+        const vx = ix * SPEED;
+        const vy = iy * SPEED;
 
-      // axis-separated move => slide along walls
-      const nx = me.x + me.vx * dt;
-      if (!hitsAny(nx, me.y, AVATAR_R)) me.x = nx; else { me.vx = 0; if (target) target = null; }
-      const ny = me.y + me.vy * dt;
-      if (!hitsAny(me.x, ny, AVATAR_R)) me.y = ny; else { me.vy = 0; if (target) target = null; }
+        // axis-separated move => slide along walls
+        const nx = me.x + vx * dt;
+        if (!hitsAny(nx, me.y, AVATAR_R)) {
+          me.x = nx;
+        } else if (target) {
+          target = null;
+        }
 
-      if (Math.hypot(me.vx, me.vy) > 8) me.dir = Math.atan2(me.vy, me.vx);
+        const ny = me.y + vy * dt;
+        if (!hitsAny(me.x, ny, AVATAR_R)) {
+          me.y = ny;
+        } else if (target) {
+          target = null;
+        }
+
+        me.dir = Math.atan2(vy, vx);
+      }
 
       // smooth remote avatars toward their last network position
       const k = 1 - Math.exp(-12 * dt);
-      peersRef.current.forEach((p) => { p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; });
+      peersRef.current.forEach((p) => {
+        p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k;
+        if (p.avtar && !avatarImages.has(p.id)) {
+          const image = loadAvatar(p.avtar);
+
+          image.onload = () => {
+            avatarImages.set(p.id, image);
+          };
+
+          avatarImages.set(p.id, image);
+        }
+      });
 
       broadcast(me.x, me.y, me.dir);
     };
@@ -344,7 +399,10 @@ export default function OfficeCanvas({
         drawAvatar(g, u, {
           isMe: u === me,
           speaking: u !== me && u.near,
-          avatarImage: u === me ? avatarImageRef.current : null,
+          avatarImage:
+            u === me
+              ? avatarImageRef.current
+              : avatarImages.get(u.id) || null,
         })
       );
 

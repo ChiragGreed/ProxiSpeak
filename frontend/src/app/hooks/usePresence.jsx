@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 
 /**
@@ -15,7 +15,7 @@ import { io } from 'socket.io-client';
  * Remote users live in a ref (a Map), NOT React state, so 60fps canvas
  * rendering never triggers React re-renders.
  */
-export function usePresence({ url, me, enabled = true }) {
+export function usePresence({ url, me, meetingId, enabled = true }) {
   const socketRef = useRef(null);
   const peersRef = useRef(new Map());       // id -> { id,name,color,x,y,tx,ty,dir }
   const lastSent = useRef({ x: NaN, y: NaN, t: 0 });
@@ -23,12 +23,12 @@ export function usePresence({ url, me, enabled = true }) {
   useEffect(() => {
     if (!enabled) return;
     console.log(url);
-    
 
-    const socket = io(url, { 
-        transports: ['websocket'] ,
-        withCredentials: true,
-        reconnectionAttempts: 5 
+
+    const socket = io(url, {
+      transports: ['websocket'],
+      withCredentials: true,
+      reconnectionAttempts: 5
     });
 
     socketRef.current = socket;
@@ -43,30 +43,34 @@ export function usePresence({ url, me, enabled = true }) {
       });
     };
 
-    socket.on('connect', () => socket.emit('join', me.current));
+    socket.on('connect', () => socket.emit('join', me.current, meetingId));
     socket.on('presence:init', (list) => list.filter((u) => u.id !== me.current.id).forEach(upsert));
     socket.on('presence:join', (u) => u.id !== me.current.id && upsert(u));
     socket.on('presence:move', (u) => {
+      console.log('REMOTE MOVE:', u);
       const p = peers.get(u.id);
       if (p) { p.tx = u.x; p.ty = u.y; p.dir = u.dir; }
     });
     socket.on('presence:leave', (id) => peers.delete(id));
 
     return () => { socket.disconnect(); peers.clear(); };
-  }, [url, enabled, me]);
+  }, [url, enabled, me, meetingId]);
 
   // Call every frame; only sends when moved and >= 66ms since the last packet.
-  const broadcast = (x, y, dir) => {
+  const broadcast = useCallback((x, y, dir) => {
     const s = socketRef.current;
     if (!s?.connected) return;
     const now = performance.now();
     const l = lastSent.current;
-    const moved = Math.abs(x - l.x) > 0.5 || Math.abs(y - l.y) > 0.5;
+
+    const moved = !Number.isFinite(l.x) || !Number.isFinite(l.y) || Math.abs(x - l.x) > 0.5 || Math.abs(y - l.y) > 0.5;
+
     if (moved && now - l.t >= 66) {
       s.volatile.emit('move', { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, dir });
       lastSent.current = { x, y, t: now };
     }
-  };
+  }, []);
+
 
   return { peersRef, broadcast, socketRef };
 }

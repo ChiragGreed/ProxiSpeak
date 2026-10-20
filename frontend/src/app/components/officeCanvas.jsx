@@ -65,44 +65,118 @@ function hitsAny(x, y, r) {
   return false;
 }
 
-function drawAvatar(g, u, { isMe, speaking }) {
+function drawAvatar(g, u, { isMe, speaking, avatarImage }) {
   const r = AVATAR_R;
+
+  // shadow
   g.fillStyle = 'rgba(0,0,0,0.22)';
-  g.beginPath(); g.ellipse(u.x + 2, u.y + 5, r, r * 0.85, 0, 0, Math.PI * 2); g.fill();
+  g.beginPath();
+  g.ellipse(u.x + 2, u.y + 5, r, r * 0.85, 0, 0, Math.PI * 2);
+  g.fill();
+
+  // speaking ring
   if (speaking) {
-    g.strokeStyle = 'rgba(80,200,255,0.9)'; g.lineWidth = 3;
-    g.beginPath(); g.arc(u.x, u.y, r + 5, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = 'rgba(80,200,255,0.9)';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(u.x, u.y, r + 5, 0, Math.PI * 2);
+    g.stroke();
   }
-  g.fillStyle = u.color || '#7aa2ff';
-  g.beginPath(); g.arc(u.x, u.y, r, 0, Math.PI * 2); g.fill();
-  g.lineWidth = 3; g.strokeStyle = isMe ? '#2f6bff' : '#fff'; g.stroke();
+
+  /*
+   * Avatar
+   */
+  if (avatarImage && avatarImage.complete && avatarImage.naturalWidth > 0) {
+    g.save();
+
+    // Clip the image into a circle
+    g.beginPath();
+    g.arc(u.x, u.y, r, 0, Math.PI * 2);
+    g.clip();
+
+    // Cover the circular area with the image
+    const size = r * 2;
+
+    g.drawImage(avatarImage, u.x - r, u.y - r, size, size);
+    g.restore();
+  } else {
+    // Fallback when no avatar is available
+    g.fillStyle = u.color || '#7aa2ff';
+    g.beginPath();
+    g.arc(u.x, u.y, r, 0, Math.PI * 2);
+    g.fill();
+
+    g.fillStyle = '#0d1b3a';
+    g.font = '700 15px system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+
+    g.fillText((u.name || '?')[0].toUpperCase(), u.x, u.y + 1);
+  }
+
+  // avatar border
+  g.lineWidth = 3;
+  g.strokeStyle = isMe ? '#2f6bff' : '#fff';
+  g.beginPath();
+  g.arc(u.x, u.y, r, 0, Math.PI * 2);
+  g.stroke();
+
   // facing nub
   g.fillStyle = '#fff';
-  g.beginPath(); g.arc(u.x + Math.cos(u.dir || 0) * (r - 6), u.y + Math.sin(u.dir || 0) * (r - 6), 4, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#0d1b3a'; g.font = '700 15px system-ui, sans-serif';
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText((u.name || '?')[0].toUpperCase(), u.x, u.y + 1);
+  g.beginPath();
+  g.arc(u.x + Math.cos(u.dir || 0) * (r - 6), u.y + Math.sin(u.dir || 0) * (r - 6), 4, 0, Math.PI * 2);
+  g.fill();
+
   // online dot
-  g.fillStyle = '#2ecc71'; g.beginPath(); g.arc(u.x + r * 0.75, u.y - r * 0.75, 5, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#2ecc71';
+  g.beginPath();
+  g.arc(u.x + r * 0.75, u.y - r * 0.75, 5, 0, Math.PI * 2);
+  g.fill();
+
   // name pill
   g.font = '600 12px system-ui, sans-serif';
-  const label = isMe ? 'You' : u.name;
+  const label = u.name || '?';
   const w = g.measureText(label).width + 14;
+
   g.fillStyle = 'rgba(20,28,48,0.85)';
-  g.beginPath(); g.roundRect(u.x - w / 2, u.y + r + 6, w, 18, 9); g.fill();
-  g.fillStyle = '#fff'; g.fillText(label, u.x, u.y + r + 15.5);
+  g.beginPath();
+  g.roundRect(u.x - w / 2, u.y + r + 6, w, 18, 9);
+  g.fill();
+
+  g.fillStyle = '#fff';
+  g.fillText(label, u.x, u.y + r + 15.5);
 }
 
 export default function OfficeCanvas({
   serverUrl = 'http://localhost:3000',
-  user = { id: crypto.randomUUID(), name: 'You', color: '#8ec5ff' },
+  user,
+  meetingId,
+  meetingUsers,
   onNearbyChange,          // ([{id, distance, gain}]) => void  -> drive WebRTC gain nodes
   className = '',
 }) {
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
-  const meRef = useRef({ ...user, x: 760, y: 440, vx: 0, vy: 0, dir: 0 });
-  const identity = useRef(user);
+  const avatarImageRef = useRef(null);
+  const canvasUser = {
+    id: user?._id,
+    name: user?.fullName,
+    color: user?.color || '#7aa2ff',
+    avtar: user?.avtar,
+  };
+
+  useEffect(() => {
+    const image = new Image();
+
+    image.onload = () => {
+      avatarImageRef.current = image;
+    };
+
+    image.src = canvasUser.avtar;
+  }, [canvasUser.avtar]);
+
+  const meRef = useRef({ ...canvasUser, x: 760, y: 440, vx: 0, vy: 0, dir: 0, });
+  const identity = useRef(canvasUser);
   const { peersRef, broadcast } = usePresence({ url: serverUrl, me: identity });
   const cbRef = useRef(onNearbyChange);
   cbRef.current = onNearbyChange;
@@ -119,43 +193,43 @@ export default function OfficeCanvas({
 
     /* ----- sizing: fit the whole office into the container ----- */
     const resize = () => {
-        const dpr = window.devicePixelRatio || 1;
-        const { width, height } = wrap.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const { width, height } = wrap.getBoundingClientRect();
 
-        // Ignore invalid dimensions.
-        if (
-            !Number.isFinite(width) ||
-            !Number.isFinite(height) ||
-            width <= 0 ||
-            height <= 0
-        ) {
-            return;
-        }
+      // Ignore invalid dimensions.
+      if (
+        !Number.isFinite(width) ||
+        !Number.isFinite(height) ||
+        width <= 0 ||
+        height <= 0
+      ) {
+        return;
+      }
 
-        const pixelWidth = Math.round(width * dpr);
-        const pixelHeight = Math.round(height * dpr);
+      const pixelWidth = Math.round(width * dpr);
+      const pixelHeight = Math.round(height * dpr);
 
-        // Resize only when the backing buffer actually changes.
-        if (canvas.width !== pixelWidth) {
-            canvas.width = pixelWidth;
-        }
+      // Resize only when the backing buffer actually changes.
+      if (canvas.width !== pixelWidth) {
+        canvas.width = pixelWidth;
+      }
 
-        if (canvas.height !== pixelHeight) {
-            canvas.height = pixelHeight;
-        }
+      if (canvas.height !== pixelHeight) {
+        canvas.height = pixelHeight;
+      }
 
-        const s = Math.min(
-            width / WORLD.w,
-            height / WORLD.h
-        );
+      const s = Math.min(
+        width / WORLD.w,
+        height / WORLD.h
+      );
 
-        view = {
-            s,
-            dpr,
-            ox: (width - WORLD.w * s) / 2,
-            oy: (height - WORLD.h * s) / 2
-        };
-        };
+      view = {
+        s,
+        dpr,
+        ox: (width - WORLD.w * s) / 2,
+        oy: (height - WORLD.h * s) / 2
+      };
+    };
     const ro = new ResizeObserver(resize); ro.observe(wrap); resize();
 
     /* ----- input ----- */
@@ -266,7 +340,13 @@ export default function OfficeCanvas({
 
       // avatars, depth-sorted by y
       const drawList = [...peersRef.current.values(), me].sort((a, b) => a.y - b.y);
-      drawList.forEach((u) => drawAvatar(g, u, { isMe: u === me, speaking: u !== me && u.near }));
+      drawList.forEach((u) =>
+        drawAvatar(g, u, {
+          isMe: u === me,
+          speaking: u !== me && u.near,
+          avatarImage: u === me ? avatarImageRef.current : null,
+        })
+      );
 
       // minimap (screen space)
       g.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
@@ -296,14 +376,14 @@ export default function OfficeCanvas({
 
   return (
     <div
-        ref={wrapRef}
-        className={`office-canvas ${className}`}
+      ref={wrapRef}
+      className={`office-canvas ${className}`}
     >
-        <canvas
+      <canvas
         ref={canvasRef}
         tabIndex={0}
         className="office-canvas__surface"
-        />
+      />
     </div>
   );
 }

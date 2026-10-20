@@ -11,7 +11,7 @@ export const createMeeting = async (req, res) => {
     })
 }
 
-export const getMeetingUsers = async (req, res) => {
+export const getMeetingDetails = async (req, res) => {
     const { meetingId } = req.params;
 
     if (!meetingId) return res.status(400).json({
@@ -27,9 +27,9 @@ export const getMeetingUsers = async (req, res) => {
     })
 
     res.status(200).json({
-        message: `Fetched all users from meeting with meetingId: ${meetingId}`,
+        message: `Fetched meeting details of meetingId: ${meetingId}`,
         success: true,
-        users: meeting.users
+        meeting
 
     })
 

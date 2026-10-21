@@ -6,12 +6,6 @@ const meetingApi = axios.create({
 })
 
 export const getMeetingDetails = async (meetingId) => {
-    try {
-        const response = await meetingApi.get(`/details/${meetingId}`);
-        console.log(response);
-        return response.data;
-    }
-    catch (error) {
-        console.error('Error fetching meeting details:', error);
-    }
+    const response = await meetingApi.get(`/details/${meetingId}`);
+    return response.data;
 }

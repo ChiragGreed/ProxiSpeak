@@ -6,16 +6,19 @@ import useMeeting from '../Features/Meeting/hooks/useMeeting.js';
 
 export default function App() {
   const currentUser = useSelector((state) => state.auth.currentUser);
-  const requestedMeetingId = '6ace5736c5f26df0ce9a452b'; // Hardcoded meetingId for testing purposes
+  const requestedMeetingId = '6ade663f164d36dfb310b741'; // Hardcoded meetingId for testing purposes
   const [nearby, setNearby] = useState([]);
-  const { meetingId, meetingUsers, getMeetingDetailHandler } = useMeeting();
+  const { meetingId, meetingUsers, meetingerror, getMeetingDetailHandler } = useMeeting();
 
   useEffect(() => {
     getMeetingDetailHandler(requestedMeetingId);
   }, [getMeetingDetailHandler, requestedMeetingId]);
 
+  if(meetingerror){
+    return <div>{meetingerror}</div>
+  }
   if (!currentUser || !meetingId) {
-    return <div>Loading...</div>;
+    return <div className='Loader'>Loading...</div>;
   }
 
   return (

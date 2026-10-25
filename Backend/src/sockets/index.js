@@ -1,3 +1,5 @@
+import socketMovement from "./userMovements.js";
+
 const users = new Map();
 // socket.id -> { id, name, color, x, y, dir, meetingId }
 
@@ -24,13 +26,7 @@ const registerSocketHandlers = (io) => {
       console.log(`User ${user.name} joined meeting ${meetingId}`);
     });
 
-    socket.on("move", (m) => {
-      const u = users.get(socket.id);
-      if (!u) return;
-
-      Object.assign(u, m);
-      socket.to(u.meetingId).emit("presence:move", { id: u.id, ...m });
-    });
+    socketMovement(socket, users);
 
     socket.on("disconnect", () => {
       const u = users.get(socket.id);

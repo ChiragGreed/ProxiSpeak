@@ -5,6 +5,7 @@ import {
 } from '../libs/officeLayout.jsx';
 import { usePresence } from '../hooks/usePresence.jsx';
 import './officeCanvas.css';
+import { useWebRTC } from '../hooks/useWebRTC.jsx';
 
 const SPEED = 400;      // world units / sec
 
@@ -192,7 +193,11 @@ export default function OfficeCanvas({
 
   const meRef = useRef({ ...canvasUser, x: 760, y: 440, dir: 0, });
   const identity = useRef({ ...canvasUser, x: 760, y: 440, dir: 0, });
-  const { peersRef, broadcast } = usePresence({ url: serverUrl, me: identity, meetingId });
+
+  const { peersRef, broadcast, socket } = usePresence({ url: serverUrl, me: identity, meetingId });
+
+  const { enableAudio, disableAudio, audioEnabled } = useWebRTC(socket, user?._id);
+
   const cbRef = useRef(onNearbyChange);
   cbRef.current = onNearbyChange;
 
@@ -442,6 +447,46 @@ export default function OfficeCanvas({
         tabIndex={0}
         className="office-canvas__surface"
       />
+      <div className="office-canvas__controls">
+        <button
+          type="button"
+          className={`office-canvas__audio-button${audioEnabled ? ' office-canvas__audio-button--enabled' : ''}`}
+          onClick={audioEnabled ? disableAudio : enableAudio}
+          aria-pressed={audioEnabled}
+          aria-label={audioEnabled ? 'Disable microphone' : 'Enable microphone'}
+        >
+          <svg
+            className="office-canvas__audio-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M19 11v1a7 7 0 0 1-14 0v-1m7 8v3m-4 0h8"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {!audioEnabled && (
+              <path
+                d="m4 4 16 16"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            )}
+          </svg>
+          <span>{audioEnabled ? 'Microphone on' : 'Enable microphone'}</span>
+        </button>
+      </div>
     </div>
   );
 }

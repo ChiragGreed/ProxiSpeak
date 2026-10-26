@@ -8,7 +8,7 @@ const Register = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { registerHandler, Loading } = useAuth();
+  const { registerHandler, Loading, error } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (event) => {
@@ -24,6 +24,7 @@ const Register = () => {
       <section className="register-card">
         <h1>Create your account</h1>
         <p className="register-subtitle">Sign up to get started with ProxiSpeak.</p>
+        {error && <p className="register-error" role="alert">{error}</p>}
         <form className="register-form" onSubmit={handleSubmit}>
           <label className="register-field">
             Full name

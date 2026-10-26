@@ -194,12 +194,20 @@ export default function OfficeCanvas({
   const meRef = useRef({ ...canvasUser, x: 760, y: 440, dir: 0, });
   const identity = useRef({ ...canvasUser, x: 760, y: 440, dir: 0, });
 
-  const { peersRef, broadcast, socket } = usePresence({ url: serverUrl, me: identity, meetingId });
 
-  const { enableAudio, disableAudio, audioEnabled } = useWebRTC(socket, user?._id);
-
+  const nearbyIdsRef = useRef(new Set());
+  const { peersRef, broadcast, socket } = usePresence({
+    url: serverUrl,
+    me: identity,
+    meetingId,
+    onProximityChange: (nearbyUsers) => {
+      nearbyIdsRef.current = new Set(nearbyUsers.map((nearbyUser) => nearbyUser.id));
+    },
+  });
   const cbRef = useRef(onNearbyChange);
   cbRef.current = onNearbyChange;
+
+  const { enableAudio, disableAudio, audioEnabled } = useWebRTC(socket, user?._id);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -351,7 +359,7 @@ export default function OfficeCanvas({
       const me = meRef.current, list = [];
       peersRef.current.forEach((p) => {
         const d = Math.hypot(p.x - me.x, p.y - me.y);
-        p.near = d < HEAR_RADIUS;
+        p.near = nearbyIdsRef.current.has(p.id);
         if (p.near) list.push({ id: p.id, distance: d, gain: proximityGain(d) });
       });
       if (now - lastNearby > 100) { lastNearby = now; cbRef.current?.(list); }

@@ -16,6 +16,11 @@ function tokenGeneration(user, res) {
 
 }
 
+/**
+ * @route POST /api/auth/register
+ * @param {{fullName, email, password}} req 
+ * @returns {json}
+ */
 export const register = async (req, res) => {
     const { fullName, email, password } = req.body;
 

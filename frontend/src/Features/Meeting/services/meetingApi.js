@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { BACKEND_URL } from '../../../APIs/backend.api';
 
 const meetingApi = axios.create({
-    baseURL: 'http://localhost:3000/api/meeting',
+    baseURL: `${BACKEND_URL}/api/meeting`,
     withCredentials: true,
 })
 

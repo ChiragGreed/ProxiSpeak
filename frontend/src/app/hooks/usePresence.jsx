@@ -1,12 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 
-export function usePresence({ url, me, meetingId, enabled = true }) {
+/**
+ * Presence + coordinate broadcasting over Socket.IO.
+ *
+ * Server contract (adapt to your Node backend):
+ *   client -> server  'join'          { id, name, color, x, y }
+ *   client -> server  'move'          { x, y, dir }            (throttled ~15Hz)
+ *   server -> client  'presence:init' [{ id, name, color, x, y, dir }]
+ *   server -> client  'presence:join' { id, name, color, x, y, dir }
+ *   server -> client  'presence:move' { id, x, y, dir }
+ *   server -> client  'presence:leave' id
+ *   server -> client  'proximity:update' [{ socketId, id, x, y }]
+ *
+ * Remote users live in a ref (a Map), NOT React state, so 60fps canvas
+ * rendering never triggers React re-renders.
+ */
+export function usePresence({ url, me, meetingId, onProximityChange, enabled = true }) {
   const socketRef = useRef(null);
   const [socket, setSocket] = useState(null);
 
   const peersRef = useRef(new Map());
   const lastSent = useRef({ x: NaN, y: NaN, t: 0 });
+  const proximityCallbackRef = useRef(onProximityChange);
+  proximityCallbackRef.current = onProximityChange;
 
   useEffect(() => {
     if (!enabled || !meetingId) return;
@@ -39,6 +56,12 @@ export function usePresence({ url, me, meetingId, enabled = true }) {
     newSocket.on('connect', () => {
       console.log('Socket connected:', newSocket.id);
       newSocket.emit('join', me.current, meetingId);
+    });
+
+    newSocket.on('presence:leave', (id) => peers.delete(id));
+
+    newSocket.on('proximity:update', (nearbyUsers) => {
+      proximityCallbackRef.current?.(nearbyUsers);
     });
 
     newSocket.on('presence:init', (list) => {

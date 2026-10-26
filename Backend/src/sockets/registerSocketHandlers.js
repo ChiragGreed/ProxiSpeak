@@ -13,7 +13,7 @@ const registerSocketHandlers = (io) => {
       delete user.meetingId;
 
       const old = users.get(socket.id);
-      if (old) {
+      if (old) { 
         socket.leave(old.meetingId);
       }
 

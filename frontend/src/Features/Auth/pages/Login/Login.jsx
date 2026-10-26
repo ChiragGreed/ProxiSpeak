@@ -8,7 +8,7 @@ import './Login.css';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { loginHandler, Loading } = useAuth();
+  const { loginHandler, Loading, error } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (event) => {
@@ -24,6 +24,7 @@ const Login = () => {
       <section className="login-card">
         <h1>Welcome back</h1>
         <p className="login-subtitle">Log in to continue to ProxiSpeak.</p>
+        {error && <p className="login-error" role="alert">{error}</p>}
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="login-field">
             Email

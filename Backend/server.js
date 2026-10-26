@@ -27,6 +27,6 @@ registerSocketHandlers(io);
 
 ConnectToDB();
 
-httpServer.listen(Config.PORT || 3000, () => {
+httpServer.listen(Config.PORT, () => {
     console.log(`Server running at port: ${Config.PORT}`);
 })

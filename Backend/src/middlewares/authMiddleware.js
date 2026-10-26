@@ -19,6 +19,5 @@ export const verifyToken = async (req, res, next) => {
     })
 
     req.user = decodedToken.userId;
-
     next();
 }

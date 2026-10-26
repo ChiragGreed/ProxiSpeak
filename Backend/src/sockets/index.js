@@ -1,6 +1,7 @@
+import geoSpatialModel from "../models/geoSpatial.model.js";
 import socketMovement from "./userMovements.js";
 
-const users = new Map();
+const users = new Map();  //Server memory 
 // socket.id -> { id, name, color, x, y, dir, meetingId }
 
 const registerSocketHandlers = (io) => {
@@ -8,11 +9,16 @@ const registerSocketHandlers = (io) => {
     console.log("Socket connected:", socket.id);
 
     socket.on("join", (u, meetingId) => {
+      console.log(u, meetingId);
+      
       const { ...user } = u;
 
       if (!meetingId || !user.id) return;
 
       users.set(socket.id, { ...user, meetingId });
+
+      console.log(users.get(socket.id));
+      
       socket.data.id = user.id;
       socket.data.meetingId = meetingId;
 
@@ -28,13 +34,15 @@ const registerSocketHandlers = (io) => {
 
     socketMovement(socket, users);
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       const u = users.get(socket.id);
+      
       if (u) {
         socket.to(u.meetingId).emit("presence:leave", u.id);
         console.log(`User ${u.name} left meeting ${u.meetingId}`);
       }
       users.delete(socket.id);
+      const user = await geoSpatialModel.findOneAndDelete({userId: u.id, meetingId: u.meetingId});
       console.log("Socket disconnected:", socket.id);
     });
   });

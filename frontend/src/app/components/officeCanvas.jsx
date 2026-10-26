@@ -194,20 +194,30 @@ export default function OfficeCanvas({
   const meRef = useRef({ ...canvasUser, x: 760, y: 440, dir: 0, });
   const identity = useRef({ ...canvasUser, x: 760, y: 440, dir: 0, });
 
-
+  const syncPeersRef = useRef(null);
   const nearbyIdsRef = useRef(new Set());
   const { peersRef, broadcast, socket } = usePresence({
     url: serverUrl,
     me: identity,
     meetingId,
     onProximityChange: (nearbyUsers) => {
-      nearbyIdsRef.current = new Set(nearbyUsers.map((nearbyUser) => nearbyUser.id));
+      const ids = new Set(nearbyUsers.map(u => u.id));
+
+      nearbyIdsRef.current = ids;
+      syncPeersRef.current?.(ids);
     },
   });
   const cbRef = useRef(onNearbyChange);
   cbRef.current = onNearbyChange;
 
-  const { enableAudio, disableAudio, audioEnabled } = useWebRTC(socket, user?._id);
+  const { enableAudio, disableAudio, audioEnabled, syncWebRTCPeers } = useWebRTC(socket, user?._id, nearbyIdsRef);
+
+  syncPeersRef.current = syncWebRTCPeers;
+
+  const handleEnableAudio = async () => {
+    await enableAudio();
+    await syncWebRTCPeers(nearbyIdsRef.current);
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -459,7 +469,7 @@ export default function OfficeCanvas({
         <button
           type="button"
           className={`office-canvas__audio-button${audioEnabled ? ' office-canvas__audio-button--enabled' : ''}`}
-          onClick={audioEnabled ? disableAudio : enableAudio}
+          onClick={audioEnabled ? disableAudio : handleEnableAudio}
           aria-pressed={audioEnabled}
           aria-label={audioEnabled ? 'Disable microphone' : 'Enable microphone'}
         >

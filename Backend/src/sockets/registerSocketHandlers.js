@@ -1,8 +1,12 @@
+import socketMovements, { broadcastProximity } from "./userMovements.js";
+
 const users = new Map();
 
 const registerSocketHandlers = (io) => {
   io.on('connection', (socket) => {
     console.log('Socket connected:', socket.id);
+
+    socketMovements(socket, users, io);
 
     socket.on('join', (u, meetingIdArg) => {
       const meetingId = meetingIdArg || u?.meetingId;
@@ -13,7 +17,7 @@ const registerSocketHandlers = (io) => {
       delete user.meetingId;
 
       const old = users.get(socket.id);
-      if (old) { 
+      if (old) {
         socket.leave(old.meetingId);
       }
 
@@ -29,6 +33,8 @@ const registerSocketHandlers = (io) => {
 
       socket.emit('presence:init', meetingUsers);
       socket.to(meetingId).emit('presence:join', user);
+
+      broadcastProximity(io, users, meetingId);
 
       console.log(`User ${user.name} joined meeting ${meetingId}`);
     });
@@ -72,18 +78,6 @@ const registerSocketHandlers = (io) => {
     socket.on('webrtc:answer', (payload) => forward('webrtc:answer', payload, 'answer'));
     socket.on('webrtc:ice-candidate', (payload) => forward('webrtc:ice-candidate', payload, 'candidate'));
 
-    socket.on('move', (m) => {
-      const u = users.get(socket.id);
-      if (!u || !m) return;
-
-      const { x, y, dir } = m;
-      if (typeof x === 'number') u.x = x;
-      if (typeof y === 'number') u.y = y;
-      if (typeof dir === 'number') u.dir = dir;
-
-      socket.to(u.meetingId).emit('presence:move', { id: u.id, x: u.x, y: u.y, dir: u.dir });
-    });
-
     socket.on('disconnect', () => {
       const u = users.get(socket.id);
       if (u) {
@@ -92,6 +86,9 @@ const registerSocketHandlers = (io) => {
       }
 
       users.delete(socket.id);
+      if (u) {
+        broadcastProximity(io, users, u.meetingId);
+      }
       console.log('Socket disconnected:', socket.id);
     });
   });

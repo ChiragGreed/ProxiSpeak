@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 
-export function useWebRTC(socket, userId) {
+export function useWebRTC(socket, userId, nearbyIdsRef) {
   const peerConnections = useRef(new Map());
   const streamRef = useRef(null);
+  const readyPeersRef = useRef(new Set());
   const audioElements = useRef(new Map());
   const pendingCandidates = useRef(new Map());
 
@@ -96,15 +97,50 @@ export function useWebRTC(socket, userId) {
     socket.emit('webrtc:offer', { targetUserId: id, offer: pc.localDescription });
   }, [socket, userId, createPeer]);
 
+  const syncWebRTCPeers = useCallback(async (nearbyIds) => {
+    if (!socket?.connected) return;
+
+    for (const id of [...peerConnections.current.keys()]) {
+      if (!nearbyIds.has(id)) {
+        closePeer(id);
+      }
+    }
+
+    if (!streamRef.current) return;
+
+    for (const id of nearbyIds) {
+      if (id === userId) continue;
+      if (!readyPeersRef.current.has(id)) continue;
+      if (peerConnections.current.has(id)) continue;
+
+      // Only one user initiates the offer
+      if (String(userId) > String(id)) continue;
+
+      try {
+        await makeOffer(id);
+      } catch (error) {
+        console.error('Proximity connection failed:', error);
+      }
+    }
+  }, [socket, userId, closePeer, makeOffer]);
+
+
   const enableAudio = useCallback(async () => {
     if (streamRef.current) return;
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
     streamRef.current = stream;
     setAudioEnabled(true);
 
-    if (socket?.connected) socket.emit('webrtc:ready');
-  }, [socket]);
+    if (socket?.connected) {
+      socket.emit('webrtc:ready');
+    }
+
+    // Check users who were already nearby
+    syncWebRTCPeers(nearbyIdsRef.current);
+
+  }, [socket, syncWebRTCPeers, nearbyIdsRef]);
 
   const disableAudio = useCallback(() => {
     socket?.emit('webrtc:not-ready');
@@ -126,22 +162,21 @@ export function useWebRTC(socket, userId) {
     };
 
     const onReadyUsers = (ids) => {
-      // Only existing ready users initiate to the newly ready user.
-      // The newcomer waits for their offers to avoid simultaneous-offer glare.
-      console.log('Already audio-ready in meeting:', ids);
+      readyPeersRef.current = new Set(ids);
+
+      syncWebRTCPeers(nearbyIdsRef.current);
     };
 
-    const onUserReady = async ({ userId: id }) => {
-      if (!streamRef.current || id === userId) return;
-      try {
-        await makeOffer(id);
-      } catch (e) {
-        console.error('Offer failed', e);
-      }
+    const onUserReady = ({ userId: id }) => {
+      readyPeersRef.current.add(id);
+
+      syncWebRTCPeers(nearbyIdsRef.current);
     };
 
     const onOffer = async ({ fromUserId, offer }) => {
       if (!streamRef.current) return;
+      if (!nearbyIdsRef.current.has(fromUserId)) return;
+
       try {
         const pc = createPeer(fromUserId);
         await pc.setRemoteDescription(offer);
@@ -183,8 +218,15 @@ export function useWebRTC(socket, userId) {
       }
     };
 
-    const onNotReady = ({ userId: id }) => closePeer(id);
-    const onLeave = (id) => closePeer(id);
+    const onNotReady = ({ userId: id }) => {
+      readyPeersRef.current.delete(id);
+      closePeer(id);
+    };
+
+    const onLeave = (id) => {
+      readyPeersRef.current.delete(id);
+      closePeer(id);
+    };
 
     socket.on('connect', onConnect);
     socket.on('webrtc:ready-users', onReadyUsers);
@@ -209,7 +251,7 @@ export function useWebRTC(socket, userId) {
       socket.off('webrtc:user-not-ready', onNotReady);
       socket.off('presence:leave', onLeave);
     };
-  }, [socket, userId, makeOffer, createPeer, flushCandidates, closePeer]);
+  }, [socket, userId, makeOffer, createPeer, flushCandidates, closePeer, syncWebRTCPeers, nearbyIdsRef]);
 
   useEffect(() => () => {
     for (const pc of peerConnections.current.values()) {
@@ -223,5 +265,5 @@ export function useWebRTC(socket, userId) {
     streamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
 
-  return { enableAudio, disableAudio, audioEnabled, connectedPeers, peerConnections };
+  return { enableAudio, disableAudio, audioEnabled, connectedPeers, peerConnections, syncWebRTCPeers };
 }

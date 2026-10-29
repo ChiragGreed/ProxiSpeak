@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 
 /**
@@ -18,65 +18,117 @@ import { io } from 'socket.io-client';
  */
 export function usePresence({ url, me, meetingId, onProximityChange, enabled = true }) {
   const socketRef = useRef(null);
-  const peersRef = useRef(new Map());       // id -> { id,name,color,x,y,tx,ty,dir }
+  const [socket, setSocket] = useState(null);
+
+  const peersRef = useRef(new Map());
   const lastSent = useRef({ x: NaN, y: NaN, t: 0 });
   const proximityCallbackRef = useRef(onProximityChange);
   proximityCallbackRef.current = onProximityChange;
 
   useEffect(() => {
-    if (!enabled) return;
-    console.log(url);
+    if (!enabled || !meetingId) return;
 
-
-    const socket = io(url, {
+    // Create socket only when effect runs
+    const newSocket = io(url, {
       transports: ['websocket'],
       withCredentials: true,
       reconnectionAttempts: 5
     });
 
-    socketRef.current = socket;
+    socketRef.current = newSocket;
+    setSocket(newSocket);
+
     const peers = peersRef.current;
 
     const upsert = (u) => {
       const prev = peers.get(u.id);
+
       peers.set(u.id, {
-        ...prev, ...u,
-        x: prev ? prev.x : u.x, y: prev ? prev.y : u.y, // render pos (interpolated)
-        tx: u.x, ty: u.y,                                // network target
+        ...prev,
+        ...u,
+        x: prev ? prev.x : u.x,
+        y: prev ? prev.y : u.y,
+        tx: u.x,
+        ty: u.y
       });
     };
 
-    socket.on('connect', () => socket.emit('join', me.current, meetingId));
-    socket.on('presence:init', (list) => list.filter((u) => u.id !== me.current.id).forEach(upsert));
-    socket.on('presence:join', (u) => u.id !== me.current.id && upsert(u));
-    socket.on('presence:move', (u) => {
-      console.log('REMOTE MOVE:', u);
-      const p = peers.get(u.id);
-      if (p) { p.tx = u.x; p.ty = u.y; p.dir = u.dir; }
+    newSocket.on('connect', () => {
+      console.log('Socket connected:', newSocket.id);
+      newSocket.emit('join', me.current, meetingId);
     });
-    socket.on('presence:leave', (id) => peers.delete(id));
-    socket.on('proximity:update', (nearbyUsers) => {
+
+    newSocket.on('presence:leave', (id) => peers.delete(id));
+
+    newSocket.on('proximity:update', (nearbyUsers) => {
       proximityCallbackRef.current?.(nearbyUsers);
     });
 
-    return () => { socket.disconnect(); peers.clear(); };
+    newSocket.on('presence:init', (list) => {
+      list
+        .filter((u) => u.id !== me.current.id)
+        .forEach(upsert);
+    });
+
+    newSocket.on('presence:join', (u) => {
+      if (u.id !== me.current.id) upsert(u);
+    });
+
+    newSocket.on('presence:move', (u) => {
+      const peer = peers.get(u.id);
+
+      if (peer) {
+        peer.tx = u.x;
+        peer.ty = u.y;
+        peer.dir = u.dir;
+      }
+    });
+
+    newSocket.on('presence:leave', (id) => {
+      peers.delete(id);
+    });
+
+    return () => {
+      console.log('Cleaning up socket:', newSocket.id);
+
+      newSocket.disconnect();
+
+      if (socketRef.current === newSocket) {
+        socketRef.current = null;
+      }
+
+      peers.clear();
+    };
   }, [url, enabled, me, meetingId]);
 
-  // Call every frame; only sends when moved and >= 66ms since the last packet.
   const broadcast = useCallback((x, y, dir) => {
     const s = socketRef.current;
     if (!s?.connected) return;
+
     const now = performance.now();
-    const l = lastSent.current;
+    const last = lastSent.current;
 
-    const moved = !Number.isFinite(l.x) || !Number.isFinite(l.y) || Math.abs(x - l.x) > 0.5 || Math.abs(y - l.y) > 0.5;
+    const moved =
+      !Number.isFinite(last.x) ||
+      !Number.isFinite(last.y) ||
+      Math.abs(x - last.x) > 0.5 ||
+      Math.abs(y - last.y) > 0.5;
 
-    if (moved && now - l.t >= 66) {
-      s.volatile.emit('move', { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, dir });
+    if (moved && now - last.t >= 66) {
+      s.volatile.emit('move', {
+        x: Math.round(x * 10) / 10,
+        y: Math.round(y * 10) / 10,
+        dir
+      });
+
       lastSent.current = { x, y, t: now };
     }
   }, []);
 
-
-  return { peersRef, broadcast, socketRef };
+  return {
+    peersRef,
+    broadcast,
+    socketRef,
+    socket
+  };
 }

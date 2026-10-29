@@ -3,7 +3,7 @@ import { Server } from "socket.io";
 import { createServer } from 'http';
 import ConnectToDB from './src/config/database.js';
 import { Config } from "./src/config/config.js";
-import registerSocketHandlers from './src/sockets/index.js';
+import registerSocketHandlers from './src/sockets/registerSocketHandlers.js';
 
 const httpServer = createServer(app);
 

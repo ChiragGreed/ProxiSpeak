@@ -14,6 +14,7 @@ export default function App() {
     getMeetingDetailHandler(requestedMeetingId);
   }, [getMeetingDetailHandler, requestedMeetingId]);
 
+  
   if(meetingerror){
     return <div>{meetingerror}</div>
   }
